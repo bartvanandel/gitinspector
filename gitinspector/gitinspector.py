@@ -52,6 +52,7 @@ class Runner(object):
 		self.timeline = False
 		self.useweeks = False
 		self.forcemonths = False
+		self.complexity = False
 
 	def process(self, repos):
 		localization.check_compatibility(version.__version__)
@@ -85,7 +86,7 @@ class Runner(object):
 		outputable.output(ChangesOutput(summed_changes))
 
 		if summed_changes.get_commits():
-			outputable.output(BlameOutput(summed_changes, summed_blames, self.forcemonths))
+			outputable.output(BlameOutput(summed_changes, summed_blames, self.forcemonths, self.complexity))
 
 			if self.timeline:
 				if self.useweeks and self.forcemonths:
@@ -146,10 +147,11 @@ def main():
 	repos = []
 
 	try:
-		opts, args = optval.gnu_getopt(argv[1:], "f:F:hHlLmrTwMx:", ["exclude=", "file-types=", "format=",
+		opts, args = optval.gnu_getopt(argv[1:], "cf:F:hHlLmrTwMx:", ["exclude=", "file-types=", "format=",
 		                                         "hard:true", "help", "list-file-types:true", "localize-output:true",
 		                                         "metrics:true", "responsibilities:true", "since=", "grading:true",
-		                                         "timeline:true", "until=", "version", "weeks:true", "forcemonths:true"])
+		                                         "timeline:true", "until=", "version", "weeks:true", "forcemonths:true",
+		                                         "complexity:true"])
 		#Neither of these describes a repository, and looking for one fails outside a working tree.
 		for o, a in opts:
 			if o in("-h", "--help"):
@@ -174,6 +176,10 @@ def main():
 			elif o in("-F", "--format"):
 				if not format.select(a):
 					raise format.InvalidFormatError(_("specified output format not supported."))
+			elif o == "-c":
+				run.complexity = True
+			elif o == "--complexity":
+				run.complexity = optval.get_boolean_argument(a)
 			elif o == "-H":
 				run.hard = True
 			elif o == "--hard":
@@ -198,6 +204,7 @@ def main():
 				interval.set_since(a)
 			elif o == "--grading":
 				grading = optval.get_boolean_argument(a)
+				run.complexity = grading
 				run.include_metrics = grading
 				run.list_file_types = grading
 				run.responsibilities = grading

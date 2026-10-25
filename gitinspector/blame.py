@@ -25,6 +25,7 @@ import subprocess
 import threading
 from .localization import N_
 from .changes import FileDiff
+from .metrics import MetricsLogic
 from . import comment, extensions, filtering, format, git, interval, terminal, workers
 
 class BlameEntry(object):
@@ -32,6 +33,7 @@ class BlameEntry(object):
 	skew_w = 0 # Used when calculating average code age.
 	skew_m = 0 # Used when calculating average code age.
 	comments = 0
+	complexity = 0
 	useweeks = None
 
 	def __init__(self, useweeks):
@@ -41,6 +43,9 @@ class BlameEntry(object):
 		if not self.useweeks or forcemonths:
 			return self.skew_m
 		return self.skew_w
+
+	def get_complexity(self):
+		return Blame.get_complexity(self.complexity, self.lines, self.comments)
 
 __blame_lock__ = threading.Lock()
 
@@ -60,6 +65,7 @@ class BlameThread(workers.Worker):
 		self.is_inside_comment = False
 		self.author_blames = {}
 		self.revision_authors = {}
+		self.open_structures = []
 
 	def __clear_blamechunk_info__(self):
 		self.blamechunk_email = None
@@ -90,7 +96,12 @@ class BlameThread(workers.Worker):
 		return self.revision_authors[revision]
 
 	def __handle_blamechunk_content__(self, content):
-		(comments, self.is_inside_comment) = comment.handle_comment_block(self.is_inside_comment, self.extension, content)
+		stripped = content.strip()
+		(comments, self.is_inside_comment) = comment.handle_comment_block(self.is_inside_comment, self.extension, stripped)
+		complexity = 0
+
+		if not self.is_inside_comment and not comment.is_comment(self.extension, stripped):
+			complexity = MetricsLogic.get_line_cognitive_complexity(self.open_structures, self.extension, content)
 
 		if self.blamechunk_is_prior and interval.get_since():
 			return
@@ -103,6 +114,7 @@ class BlameThread(workers.Worker):
 
 			entry = self.author_blames[author]
 			entry.comments += comments
+			entry.complexity += complexity
 			entry.lines += 1
 
 			if (self.blamechunk_time - self.changes.first_commit_date).days > 0:
@@ -116,13 +128,15 @@ class BlameThread(workers.Worker):
 
 		#pylint: disable=W0201
 		for j in range(0, len(lines)):
+			if self.blamechunk_is_last:
+				self.__handle_blamechunk_content__(git.decode(lines[j]).rstrip("\r\n")[1:])
+				self.__clear_blamechunk_info__()
+				continue
+
 			line = git.decode(lines[j]).strip()
 			keyval = line.split(" ", 2)
 
-			if self.blamechunk_is_last:
-				self.__handle_blamechunk_content__(line)
-				self.__clear_blamechunk_info__()
-			elif keyval[0] == "boundary":
+			if keyval[0] == "boundary":
 				self.blamechunk_is_prior = True
 			elif keyval[0] == "author-mail":
 				self.blamechunk_email = keyval[1].lstrip("<").rstrip(">")
@@ -196,6 +210,11 @@ class Blame(object):
 		time = re.search(r" \(.*?(\d\d\d\d-\d\d-\d\d)", string)
 		return time.group(1).strip()
 
+	@staticmethod
+	def get_complexity(complexity, lines, comments):
+		eloc = lines - comments
+		return 0.0 if eloc <= 0 else float(complexity) / eloc
+
 	def get_summed_blames(self):
 		summed_blames = {}
 		for i in self.blames.items():
@@ -206,5 +225,6 @@ class Blame(object):
 			summed_blames[i[0][0]].skew_w += i[1].skew_w
 			summed_blames[i[0][0]].skew_m += i[1].skew_m
 			summed_blames[i[0][0]].comments += i[1].comments
+			summed_blames[i[0][0]].complexity += i[1].complexity
 
 		return summed_blames

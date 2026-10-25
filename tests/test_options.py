@@ -146,6 +146,36 @@ class ExclusionPatternTest(unittest.TestCase):
 		self.assertEqual(status, 2)
 		self.assertIn("invalid regular expression", errors)
 
+class ComplexityOptionTest(unittest.TestCase):
+	def setUp(self):
+		self.repository = Repository()
+		self.repository.commit("add", {"a.py": "if x:\n    y = 1\n"}, "Alice", "alice@example.com")
+
+	def tearDown(self):
+		self.repository.remove()
+
+	def blame(self, *options):
+		(status, output, errors) = run_inside(self.repository.location, "-F", "json", *options)
+		self.assertEqual(status, 0, errors)
+		return json.loads(output)["gitinspector"]["blame"]["authors"]
+
+	def test_the_short_option_asks_for_complexity(self):
+		self.assertEqual([author["complexity"] for author in self.blame("-c")], [0.5])
+
+	def test_the_long_option_asks_for_complexity(self):
+		self.assertEqual([author["complexity"] for author in self.blame("--complexity")], [0.5])
+
+	def test_grading_asks_for_complexity(self):
+		self.assertEqual([author["complexity"] for author in self.blame("--grading")], [0.5])
+
+	def test_the_git_configuration_asks_for_complexity(self):
+		self.repository.git("config", "inspector.complexity", "true")
+		self.assertEqual([author["complexity"] for author in self.blame()], [0.5])
+
+	def test_the_long_option_can_turn_the_configured_complexity_off(self):
+		self.repository.git("config", "inspector.complexity", "true")
+		self.assertNotIn("complexity", self.blame("--complexity=false")[0])
+
 class ExclusionAndIntervalTest(unittest.TestCase):
 	def setUp(self):
 		self.repository = Repository()

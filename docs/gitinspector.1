@@ -42,6 +42,11 @@ Several output formats are supported, including plain text, HTML, JSON and XML\&
 List information about the repository in REPOSITORY\&. If no repository is specified, the current directory is used\&. If multiple repositories are given, information will be merged into a unified statistical report\&. Give REPOSITORY:BRANCH to analyze a branch other than the checked out one\&. The branch is read from the repository as it is and is never checked out\&..sp
 Mandatory arguments to long options are mandatory for short options too\&. Boolean arguments can only be given to long options\&.
 .PP
+\fB\-c, \-\-complexity\fR[=BOOL]
+.RS 4
+Show the average cognitive complexity per author in the blame analysis
+.RE
+.PP
 \fB\-f, \-\-file\-types\fR=EXTENSIONS
 .RS 4
 A comma separated list of file extensions to include when computing statistics\&. The default extensions used are: java,c,cc,cpp,h,hh,hpp,php,py,glsl,rb,js,sql,go,swift,ts,tsx,rs,groovy\&. Specifying a single
@@ -62,7 +67,7 @@ and the available formats are: html,htmlembedded,json,text,xml (see
 \fB\-\-grading\fR[=BOOL]
 .RS 4
 Show statistics and information in a way that is formatted for grading of student projects; this is the same as supplying the options
-\fB\-HlmrTw\fR
+\fB\-cHlmrTw\fR
 .RE
 .PP
 \fB\-H, \-\-hard\fR[=BOOL]

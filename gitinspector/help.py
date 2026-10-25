@@ -33,6 +33,8 @@ read as it is and never checked out.
 
 Mandatory arguments to long options are mandatory for short options too.
 Boolean arguments can only be given to long options.
+  -c, --complexity[=BOOL]        show the average cognitive complexity per
+                                   author in the blame analysis
   -f, --file-types=EXTENSIONS    a comma separated list of file extensions to
                                    include when computing statistics. The
                                    default extensions used are:
@@ -46,7 +48,7 @@ Boolean arguments can only be given to long options.
       --grading[=BOOL]           show statistics and information in a way that
                                    is formatted for grading of student
                                    projects; this is the same as supplying the
-                                   options -HlmrTw
+                                   options -cHlmrTw
   -H, --hard[=BOOL]              track lines and look for duplicates harder;
                                    this can be quite slow with big repositories
   -l, --list-file-types[=BOOL]   list all the file extensions available in the

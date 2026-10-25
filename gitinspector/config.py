@@ -74,6 +74,7 @@ class GitConfig(object):
 		self.run.responsibilities = self.__read_git_config_bool__("responsibilities")
 		self.run.useweeks = self.__read_git_config_bool__("weeks")
 		self.run.forcemonths = self.__read_git_config_bool__("forcemonths")
+		self.run.complexity = self.__read_git_config_bool__("complexity")
 
 		var = self.__read_git_config_string__("since")
 		if var[0]:
@@ -88,6 +89,7 @@ class GitConfig(object):
 		if self.__read_git_config_bool__("grading"):
 			self.run.hard = True
 			self.run.list_file_types = True
+			self.run.complexity = True
 			self.run.metrics = True
 			self.run.responsibilities = True
 			self.run.timeline = True

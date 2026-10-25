@@ -182,6 +182,87 @@ class OutputEncodingTest(unittest.TestCase):
 		self.assertEqual(process.returncode, 0, errors.decode("utf-8", "replace"))
 		self.assertIn(b"J\\xf6rg M\\xfcller", output)
 
+class ComplexityReportTest(unittest.TestCase):
+	def setUp(self):
+		self.repository = Repository()
+		self.repository.commit("nested", {"a.py": "if x:\n    if y:\n        z = 1\n"},
+		                       "Nested Author", "nested@example.com")
+		self.repository.commit("flat", {"b.py": "if q:\n    r = 1\n"}, "Flat Author", "flat@example.com",
+		                       "2015-02-01T12:00:00+0000")
+
+	def tearDown(self):
+		self.repository.remove()
+
+	def report(self, output_format, *options):
+		process = gitinspector_process(subprocess.PIPE, "utf-8", output_format, [self.repository.location], options)
+		(output, errors) = process.communicate()
+
+		self.assertEqual(process.returncode, 0, errors.decode("utf-8", "replace"))
+		return output.decode("utf-8")
+
+	def blame_authors(self, report, output_format):
+		if output_format == "json":
+			return json.loads(report)["gitinspector"]["blame"]["authors"]
+
+		root = ElementTree.fromstring(report.encode("utf-8"))
+		return root.find("blame").find("authors")
+
+	def test_the_json_reports_the_complexity_of_every_author(self):
+		authors = self.blame_authors(self.report("json", "-c"), "json")
+
+		self.assertEqual(dict((author["name"], author["complexity"]) for author in authors),
+		                 {"Nested Author": 1.0, "Flat Author": 0.5})
+
+	def test_the_xml_reports_the_complexity_of_every_author(self):
+		authors = self.blame_authors(self.report("xml", "-c"), "xml")
+
+		self.assertEqual([author.findtext("complexity") for author in authors], ["0.50", "1.00"])
+
+	def test_the_text_table_has_a_complexity_column(self):
+		lines = self.report("text", "-c").splitlines()
+
+		self.assertTrue(any("Complexity" in line for line in lines))
+		self.assertTrue([line for line in lines if line.startswith("Flat Author")][-1].endswith("0.50"))
+		self.assertTrue([line for line in lines if line.startswith("Nested Author")][-1].endswith("1.00"))
+
+	def test_the_html_table_has_a_complexity_column(self):
+		table = self.report("html", "-c").split("<table id=\"blame\"")[1].split("</table>")[0]
+
+		self.assertIn("Complexity", table)
+		self.assertIn(">0.50<", table)
+		self.assertIn(">1.00<", table)
+
+	def test_the_folded_summary_row_sums_the_complexity(self):
+		repository = Repository()
+		repository.commit("bulk", {"a.py": "".join("line {0}\n".format(i) for i in range(200))},
+		                  "Major Author", "major@example.com")
+		repository.commit("crumb", {"b.py": "if x:\n    y = 1\n"}, "Minor Author", "minor@example.com",
+		                  "2015-02-01T12:00:00+0000")
+
+		try:
+			process = gitinspector_process(subprocess.PIPE, "utf-8", "html", [repository.location], ("-c",))
+			(output, errors) = process.communicate()
+		finally:
+			repository.remove()
+
+		self.assertEqual(process.returncode, 0, errors.decode("utf-8", "replace"))
+		body = output.decode("utf-8").split("<table id=\"blame\"")[1].split("</tbody>")[0]
+		row = [row for row in body.split("<tr ") if "data-gi-minor-summary=\"true\"" in row][0]
+
+		self.assertIn(">0.50<", row)
+
+	def test_the_complexity_is_left_out_without_the_option(self):
+		json_report = json.loads(self.report("json"))
+		self.assertNotIn("complexity", json_report["gitinspector"]["blame"]["authors"][0])
+
+		xml_authors = self.blame_authors(self.report("xml"), "xml")
+		self.assertIsNone(xml_authors.find("author").find("complexity"))
+
+		self.assertNotIn("Complexity", self.report("text"))
+
+		table = self.report("html").split("<table id=\"blame\"")[1].split("</table>")[0]
+		self.assertNotIn("Complexity", table)
+
 class ChangesTotalTest(unittest.TestCase):
 	def setUp(self):
 		self.repository = Repository()

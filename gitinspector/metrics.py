@@ -128,11 +128,7 @@ class MetricsLogic(object):
 		return -1
 
 	@staticmethod
-	def get_cognitive_complexity(file_lines, extension):
-		is_inside_comment = False
-		cognitive_counter = 0
-		open_structures = []
-
+	def get_line_cognitive_complexity(open_structures, extension, line):
 		#Cognitive complexity charges a structure for how deeply it is nested, so the nesting tokens open a
 		#nested structure while the continuation tokens merely continue one that has already been counted.
 		cognitive = languages.get(extension).get("cognitive", {})
@@ -140,31 +136,45 @@ class MetricsLogic(object):
 		continuation_tokens = cognitive.get("continuation")
 
 		if not nesting_tokens:
+			return 0
+
+		line = line.expandtabs()
+
+		if not line.strip():
+			return 0
+
+		indentation = len(line) - len(line.lstrip())
+
+		#A brace alone on its line belongs to the structure above it and must not close it.
+		if line.strip() != "{":
+			while open_structures and indentation <= open_structures[-1]:
+				open_structures.pop()
+
+		continues = any(re.search(j, line) for j in continuation_tokens)
+		nests = 0 if continues else len([j for j in nesting_tokens if re.search(j, line)])
+
+		if continues or nests:
+			complexity = 1 if continues else nests * (1 + len(open_structures))
+			open_structures.append(indentation)
+			return complexity
+
+		return 0
+
+	@staticmethod
+	def get_cognitive_complexity(file_lines, extension):
+		is_inside_comment = False
+		cognitive_counter = 0
+		open_structures = []
+
+		if not languages.get(extension).get("cognitive", {}).get("nesting"):
 			return -1
 
 		for i in file_lines:
-			i = i.expandtabs()
 			(_, is_inside_comment) = comment.handle_comment_block(is_inside_comment, extension, i)
 
-			if is_inside_comment or comment.is_comment(extension, i) or not i.strip():
+			if is_inside_comment or comment.is_comment(extension, i):
 				continue
 
-			indentation = len(i) - len(i.lstrip())
-
-			#A brace alone on its line belongs to the structure above it and must not close it.
-			if i.strip() != "{":
-				while open_structures and indentation <= open_structures[-1]:
-					open_structures.pop()
-
-			continues = any(re.search(j, i) for j in continuation_tokens)
-			nests = 0 if continues else len([j for j in nesting_tokens if re.search(j, i)])
-
-			if continues:
-				cognitive_counter += 1
-			else:
-				cognitive_counter += nests * (1 + len(open_structures))
-
-			if continues or nests:
-				open_structures.append(indentation)
+			cognitive_counter += MetricsLogic.get_line_cognitive_complexity(open_structures, extension, i)
 
 		return cognitive_counter

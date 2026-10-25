@@ -30,6 +30,9 @@ OPTIONS
 List information about the repository in REPOSITORY. If no repository is specified, the current directory is used. If multiple repositories are given, information will be merged into a unified statistical report. Give REPOSITORY:BRANCH to analyze a branch other than the checked out one. The branch is read from the repository as it is and is never checked out.
 Mandatory arguments to long options are mandatory for short options too. Boolean arguments can only be given to long options.
 
+*-c, --complexity*[=BOOL]::
+	Show the average cognitive complexity per author in the blame analysis
+
 *-f, --file-types*=EXTENSIONS::
 	A comma separated list of file extensions to include when computing statistics. The default extensions used are: java,c,cc,cpp,h,hh,hpp,php,py,glsl,rb,js,sql,go,swift,ts,tsx,rs,groovy. Specifying a single '\*' asterisk character includes files with no extension. Specifying two consecutive '**' asterisk characters includes all files regardless of extension.
 
@@ -37,7 +40,7 @@ Mandatory arguments to long options are mandatory for short options too. Boolean
 	Defines in which format output should be generated; the default format is 'text' and the available formats are: html,htmlembedded,json,text,xml (see <<X1,*OUTPUT FORMATS*>>)
 
 *--grading*[=BOOL]::
-	Show statistics and information in a way that is formatted for grading of student projects; this is the same as supplying the options *-HlmrTw*
+	Show statistics and information in a way that is formatted for grading of student projects; this is the same as supplying the options *-cHlmrTw*
 
 *-H, --hard*[=BOOL]::
 	Track lines and look for duplicates harder; this can be quite slow with big repositories

@@ -39,13 +39,14 @@ def __folded_stability__(authors, lines, changes):
 	return 100 if insertions == 0 else 100.0 * lines / insertions
 
 class BlameOutput(Outputable):
-	def __init__(self, changes, blame, forcemonths):
+	def __init__(self, changes, blame, forcemonths, complexity=False):
 		if format.is_interactive_format():
 			print("")
 
 		self.changes = changes
 		self.blame = blame
 		self.forcemonths = forcemonths
+		self.complexity = complexity
 		Outputable.__init__(self)
 
 	def output_html(self):
@@ -73,6 +74,8 @@ class BlameOutput(Outputable):
 
 			rows += html_number_cell(_("Age, weeks") if months else _("Age"), "{0:.1f}".format(float(blame.get_skew()) / blame.lines))
 			rows += html_number_cell(_("% in comments"), "{0:.2f}".format(percentage(blame.comments, blame.lines)))
+			if self.complexity:
+				rows += html_number_cell(_("Complexity"), "{0:.2f}".format(blame.get_complexity()))
 			rows += html_meter_cell(_("% of total"), work_percentage, author_color(index))
 			rows += "</tr>"
 
@@ -99,8 +102,14 @@ class BlameOutput(Outputable):
 			rows += (html_number_cell(_("Age, weeks") if months else _("Age"), "{0:.1f}".format(
 			         float(sum(blame.get_skew() for blame in entries)) / lines)) +
 			         html_number_cell(_("% in comments"), "{0:.2f}".format(
-			         percentage(sum(blame.comments for blame in entries), lines))) +
-			         html_meter_cell(_("% of total"), work_percentage, "var(--muted)") + "</tr>")
+			         percentage(sum(blame.comments for blame in entries), lines))))
+
+			if self.complexity:
+				rows += html_number_cell(_("Complexity"), "{0:.2f}".format(
+				         Blame.get_complexity(sum(blame.complexity for blame in entries), lines,
+				                              sum(blame.comments for blame in entries))))
+
+			rows += html_meter_cell(_("% of total"), work_percentage, "var(--muted)") + "</tr>"
 
 		headers = "<thead><tr>" + html_header_cell(_("Author")) + html_header_cell(_("Lines"), True) + \
 		          html_header_cell(_("Stability"), True)
@@ -109,7 +118,12 @@ class BlameOutput(Outputable):
 			headers += html_header_cell(_("Age, months"), True)
 
 		headers += html_header_cell(_("Age, weeks") if months else _("Age"), True) + \
-		           html_header_cell(_("% in comments"), True) + html_header_cell(_("% of total"), True) + "</tr></thead>"
+		           html_header_cell(_("% in comments"), True)
+
+		if self.complexity:
+			headers += html_header_cell(_("Complexity"), True)
+
+		headers += html_header_cell(_("% of total"), True) + "</tr></thead>"
 
 		body = html_share(shares, _("Minor Authors"), minor) + \
 		       html_table("blame", headers + "<tbody>" + rows + "</tbody>")
@@ -135,8 +149,11 @@ class BlameOutput(Outputable):
 				age_json = ""
 				age_t_name = "age"
 			age_json += (("\t\t\t\t\"%s\": " % age_t_name) + "{0:.1f}".format(float(i[1].get_skew()) / i[1].lines) + ",\n")
+			complexity_json = ""
+			if self.complexity:
+				complexity_json = ",\n\t\t\t\t\"complexity\": " + "{0:.2f}".format(i[1].get_complexity())
 			percentage_in_comments_json = ("\t\t\t\t\"percentage_in_comments\": " +
-			                               "{0:.2f}".format(100.0 * i[1].comments / i[1].lines) + "\n")
+			                               "{0:.2f}".format(100.0 * i[1].comments / i[1].lines) + complexity_json + "\n")
 			blame_json += ("{\n" + name_json + email_json + gravatar_json + lines_json + stability_json + age_json +
 			              percentage_in_comments_json + "\t\t\t},")
 		else:
@@ -149,27 +166,39 @@ class BlameOutput(Outputable):
 			terminal.clear_line()
 
 		print(textwrap.fill(_(BLAME_INFO_TEXT) + ":", width=terminal.get_size()[0]) + "\n")
-		if self.forcemonths and self.blame.useweeks:
-			fparams = (18, 8, 10, 12, 14)
+		months = self.forcemonths and self.blame.useweeks
+		if months and self.complexity:
+			fparams = (13, 6, 9, 11, 13, 10)
+		elif months:
+			fparams = (18, 8, 10, 12, 14, 0)
+		elif self.complexity:
+			fparams = (18, 9, 11, 8, 16, 12)
 		else:
-			fparams = (20, 10, 14, 12, 19)
-		auwidth, lwidth, swidth, awidth, cwidth = fparams
+			fparams = (20, 10, 14, 12, 19, 0)
+		auwidth, lwidth, swidth, awidth, cwidth, xwidth = fparams
 		prints = terminal.ljust(_("Author"), auwidth + 1) + terminal.rjust(_("Lines"), lwidth) + terminal.rjust(_("Stability"), swidth + 1)
-		if self.forcemonths and self.blame.useweeks:
+		if months:
 			prints += terminal.rjust(_("Age, months"), awidth + 1) + terminal.rjust(_("Age, weeks"), awidth + 1)
 		else:
 			prints += terminal.rjust(_("Age"), awidth + 1)
 		prints += terminal.rjust(_("% in comments"), cwidth + 1)
+		if self.complexity:
+			prints += terminal.rjust(_("Complexity"), xwidth + 1)
 		terminal.printb(prints)
 
 		for i in sorted(self.blame.get_summed_blames().items()):
 			print(terminal.ljust(i[0], auwidth)[0:auwidth - terminal.get_excess_column_count(i[0])], end=" ")
 			print(str(i[1].lines).rjust(lwidth), end=" ")
 			print("{0:.1f}".format(Blame.get_stability(i[0], i[1].lines, self.changes)).rjust(swidth), end=" ")
-			if self.forcemonths and self.blame.useweeks:
+			if months:
 				print("{0:.1f}".format(float(i[1].get_skew(True)) / i[1].lines).rjust(awidth), end=" ")
 			print("{0:.1f}".format(float(i[1].get_skew()) / i[1].lines).rjust(awidth), end=" ")
-			print("{0:.2f}".format(100.0 * i[1].comments / i[1].lines).rjust(cwidth))
+			comments = "{0:.2f}".format(100.0 * i[1].comments / i[1].lines).rjust(cwidth)
+			if self.complexity:
+				print(comments, end=" ")
+				print("{0:.2f}".format(i[1].get_complexity()).rjust(xwidth))
+			else:
+				print(comments)
 
 	def output_xml(self):
 		message_xml = "\t\t<message>" + escape(_(BLAME_INFO_TEXT)) + "</message>\n"
@@ -193,7 +222,10 @@ class BlameOutput(Outputable):
 			age_xml += (("\t\t\t\t<%s>" % age_t_name) + "{0:.1f}".format(float(i[1].get_skew()) / i[1].lines) + ("</%s>\n" % age_t_name))
 			percentage_in_comments_xml = ("\t\t\t\t<percentage-in-comments>" + "{0:.2f}".format(100.0 * i[1].comments / i[1].lines) +
 			                              "</percentage-in-comments>\n")
+			complexity_xml = ""
+			if self.complexity:
+				complexity_xml = "\t\t\t\t<complexity>" + "{0:.2f}".format(i[1].get_complexity()) + "</complexity>\n"
 			blame_xml += ("\t\t\t<author>\n" + name_xml + email_xml + gravatar_xml + lines_xml + stability_xml +
-			              age_xml + percentage_in_comments_xml + "\t\t\t</author>\n")
+			              age_xml + percentage_in_comments_xml + complexity_xml + "\t\t\t</author>\n")
 
 		print("\t<blame>\n" + message_xml + "\t\t<authors>\n" + blame_xml + "\t\t</authors>\n\t</blame>")

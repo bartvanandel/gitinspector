@@ -48,6 +48,66 @@ class AttributionTest(unittest.TestCase):
 		self.assertEqual(sorted(filename for (author, filename) in result.blames), ["Makefile", "a.py"])
 		self.assertEqual(result.blames[(DEFAULT_AUTHOR, "Makefile")].lines, 2)
 
+class ComplexityAttributionTest(unittest.TestCase):
+	def setUp(self):
+		self.repository = Repository()
+
+	def tearDown(self):
+		self.repository.remove()
+
+	def test_flat_and_nested_code_is_charged_to_its_author(self):
+		self.repository.commit("flat", {"flat.py": "if x:\n    y = 1\n"}, "Flat Author", "flat@example.com",
+		                       "2015-01-01T12:00:00+0000")
+		self.repository.commit("nested", {"nested.js": "if (a) {\n    if (b) {\n        x();\n    }\n}\n"},
+		                       "Nested Author", "nested@example.com", "2015-02-01T12:00:00+0000")
+
+		analyzed_changes = analyze_changes(self.repository)
+		result = analyze_blame(self.repository, analyzed_changes)
+
+		flat = result.blames[("Flat Author", "flat.py")]
+		nested = result.blames[("Nested Author", "nested.js")]
+		self.assertEqual(flat.complexity, 1)
+		self.assertEqual(flat.get_complexity(), 0.5)
+		self.assertEqual(nested.complexity, 3)
+		self.assertEqual(nested.get_complexity(), 0.6)
+
+	def __commit_nested_code__(self):
+		self.repository.commit("outer", {"nested.py": "if x:\n    if y:\n        a = 1\n"},
+		                       "Outer Author", "outer@example.com", "2015-01-01T12:00:00+0000")
+		self.repository.commit("inner", {"nested.py": "if x:\n    if y:\n        if z:\n            b = 2\n"},
+		                       "Inner Author", "inner@example.com", "2015-06-01T12:00:00+0000")
+
+	def test_structures_before_the_interval_still_nest_inner_lines(self):
+		self.__commit_nested_code__()
+
+		analyzed_changes = analyze_changes(self.repository, since="2015-03-01")
+		result = analyze_blame(self.repository, analyzed_changes)
+
+		self.assertEqual(sorted(result.blames), [("Inner Author", "nested.py")])
+		self.assertEqual(result.blames[("Inner Author", "nested.py")].complexity, 3)
+		self.assertEqual(result.blames[("Inner Author", "nested.py")].get_complexity(), 1.5)
+
+	def test_structures_of_a_filtered_author_still_nest_inner_lines(self):
+		self.__commit_nested_code__()
+
+		analyzed_changes = analyze_changes(self.repository, exclude="author:Outer Author")
+		result = analyze_blame(self.repository, analyzed_changes)
+
+		self.assertEqual(sorted(result.blames), [("Inner Author", "nested.py")])
+		self.assertEqual(result.blames[("Inner Author", "nested.py")].complexity, 3)
+
+	def test_comments_add_neither_complexity_nor_executable_lines(self):
+		self.repository.commit("commented", {"commented.py": "# if x:\nif x:\n    # for y in z:\n    y = 1\n"},
+		                       "Comment Author", "comment@example.com")
+
+		analyzed_changes = analyze_changes(self.repository)
+		result = analyze_blame(self.repository, analyzed_changes)
+		entry = result.blames[("Comment Author", "commented.py")]
+
+		self.assertEqual(entry.complexity, 1)
+		self.assertEqual(entry.comments, 2)
+		self.assertEqual(entry.get_complexity(), 0.5)
+
 class SpecialFilenameTest(unittest.TestCase):
 	def setUp(self):
 		self.repository = Repository()
